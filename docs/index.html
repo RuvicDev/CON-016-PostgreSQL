@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title data-i18n="doc_title">Conector PostgreSQL — Ruvic</title>
+  <link rel="stylesheet" href="assets/ruvic.css">
+</head>
+<body class="guide">
+  <main class="ruvic-container">
+
+    <nav class="ruvic-toc" aria-label="Índice">
+      <h2 data-i18n="toc_title">Contenido</h2>
+      <ol>
+        <li><a href="#que-es" data-i18n="toc.que_es">¿Qué es y para qué sirve?</a></li>
+        <li><a href="#prerrequisitos" data-i18n="toc.prerrequisitos">Prerrequisitos</a></li>
+        <li><a href="#configuracion-fabricante" data-i18n="toc.configuracion_fabricante">Configuración en el fabricante</a></li>
+        <li><a href="#permisos" data-i18n="toc.permisos">Permisos requeridos</a></li>
+        <li><a href="#configuracion-ruvic" data-i18n="toc.configuracion_ruvic">Configuración en Ruvic</a></li>
+        <li><a href="#verificacion" data-i18n="toc.verificacion">Verificación</a></li>
+        <li><a href="#solucion-problemas" data-i18n="toc.solucion_problemas">Solución de problemas</a></li>
+        <li><a href="#faq-seguridad" data-i18n="toc.faq_seguridad">Preguntas frecuentes y notas de seguridad</a></li>
+      </ol>
+    </nav>
+
+    <h1 data-i18n="guide_title">PostgreSQL</h1>
+    <p class="guide-updated">{{ULTIMA_ACTUALIZACION}}</p>
+
+    <!-- ============ 1. QUÉ ES ============ -->
+    <section>
+      <h2 id="que-es" data-i18n="section.que_es">¿Qué es y para qué sirve?</h2>
+      <p data-i18n="que_es.body">El conector PostgreSQL permite que el agente de Ruvic acceda a tu base de datos <strong>en modo solo lectura</strong>: puede consultar información, pero nunca modificarla. Una vez configurado, puedes pedirle al agente cosas como:</p>
+      <ul>
+        <li data-i18n="que_es.ej1">“Genera un reporte con las ventas del último trimestre y envíalo por correo.”</li>
+        <li data-i18n="que_es.ej2">“¿Cuántos clientes nuevos se registraron esta semana?”</li>
+        <li data-i18n="que_es.ej3">“Revisa por qué este query está lento y proponme mejoras.”</li>
+      </ul>
+      <p data-i18n="que_es.ops">Operaciones soportadas:</p>
+      <table>
+        <thead>
+          <tr>
+            <th data-i18n="table.operacion">Operación</th>
+            <th data-i18n="table.que_hace">Qué hace</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>db.list_tables</code></td>
+            <td data-i18n="ops.list_tables">Lista las tablas de la base de datos con su cantidad de filas</td>
+          </tr>
+          <tr>
+            <td><code>db.read</code></td>
+            <td data-i18n="ops.read">Lee los datos de una tabla (con límite de filas)</td>
+          </tr>
+          <tr>
+            <td><code>db.stats</code></td>
+            <td data-i18n="ops.stats">Estadísticas de una tabla: filas, tamaño, columnas y tipos</td>
+          </tr>
+          <tr>
+            <td><code>db.explain</code></td>
+            <td data-i18n="ops.explain">Analiza el plan de ejecución de una consulta sin ejecutarla</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="callout callout-info">
+        <span class="callout-title" data-i18n="que_es.callout.title">Solo lectura, por diseño</span>
+        <span data-i18n="que_es.callout.body">El conector abre todas las conexiones en modo de solo lectura. Aunque el agente lo intentara, la base de datos rechazaría cualquier escritura.</span>
+      </div>
+    </section>
+
+    <!-- ============ 2. PRERREQUISITOS ============ -->
+    <section>
+      <h2 id="prerrequisitos" data-i18n="section.prerrequisitos">Prerrequisitos</h2>
+      <ul>
+        <li data-i18n="prer.db">Una base de datos <strong>PostgreSQL 12 o superior</strong> (en tu servidor, en la nube — RDS, Cloud SQL, Azure Database — o en Docker).</li>
+        <li data-i18n="prer.admin">Acceso administrativo a la base de datos (rol con permiso para crear usuarios), solo durante la configuración inicial.</li>
+        <li data-i18n="prer.red"><strong>Acceso de red</strong> desde la plataforma Ruvic al servidor de base de datos (host y puerto alcanzables; regla de firewall o lista de IPs permitidas si aplica).</li>
+        <li data-i18n="prer.datos">Los datos de conexión: host, puerto (por defecto <code>5432</code>) y nombre de la base de datos.</li>
+      </ul>
+    </section>
+
+    <!-- ============ 3. CONFIGURACIÓN EN EL FABRICANTE ============ -->
+    <section>
+      <h2 id="configuracion-fabricante" data-i18n="section.configuracion_fabricante">Configuración en el fabricante</h2>
+      <p data-i18n="fab.intro">Vas a crear un <strong>usuario dedicado de solo lectura</strong> para Ruvic. No uses un usuario administrador ni el de tu aplicación: un usuario dedicado permite auditar la actividad del agente y limitar el acceso al mínimo.</p>
+      <ol class="ruvic-steps">
+        <li>
+          <strong data-i18n="fab.p1.t">Conéctate a la base de datos como administrador.</strong>
+          <p data-i18n="fab.p1.b">Usa <code>psql</code> u otra herramienta (pgAdmin, DBeaver) con un rol administrador:</p>
+<pre><code>psql -h TU_HOST -p 5432 -U postgres -d TU_BASE_DE_DATOS</code></pre>
+        </li>
+        <li>
+          <strong data-i18n="fab.p2.t">Crea el usuario de solo lectura para Ruvic.</strong>
+          <p data-i18n="fab.p2.b">Elige una contraseña fuerte (mínimo 16 caracteres, generada aleatoriamente) y guárdala: la usarás en el formulario de Ruvic (campo Contraseña).</p>
+<pre><code>CREATE ROLE ruvic_reader LOGIN PASSWORD 'CAMBIA_ESTA_CONTRASEÑA';</code></pre>
+        </li>
+        <li>
+          <strong data-i18n="fab.p3.t">Otorga los permisos de lectura.</strong>
+          <p data-i18n="fab.p3.b">Sobre la base de datos y los esquemas que quieras exponer al agente (el ejemplo usa <code>public</code>; repite para otros esquemas):</p>
+<pre><code>GRANT CONNECT ON DATABASE tu_base_de_datos TO ruvic_reader;
+GRANT USAGE ON SCHEMA public TO ruvic_reader;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO ruvic_reader;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+    GRANT SELECT ON TABLES TO ruvic_reader;</code></pre>
+          <div class="callout callout-info">
+            <span class="callout-title" data-i18n="fab.p3.note.title">Nota</span>
+            <span data-i18n="fab.p3.note.body">La última instrucción hace que las tablas creadas en el futuro también sean legibles por Ruvic sin repetir el GRANT.</span>
+          </div>
+        </li>
+        <li>
+          <strong data-i18n="fab.p4.t">Habilita el acceso de red desde Ruvic.</strong>
+          <p data-i18n="fab.p4.b">Si tu PostgreSQL restringe conexiones por IP (habitual en producción), permite la IP de la plataforma Ruvic:</p>
+          <ul>
+            <li data-i18n="fab.p4.li1"><strong>Servidor propio</strong>: agrega una línea en <code>pg_hba.conf</code> (ej. <code>host tu_bd ruvic_reader IP_DE_RUVIC/32 scram-sha-256</code>) y recarga la configuración (<code>SELECT pg_reload_conf();</code>).</li>
+            <li data-i18n="fab.p4.li2"><strong>AWS RDS / Cloud SQL / Azure</strong>: agrega la IP en el security group o en la lista de redes autorizadas de la consola del proveedor.</li>
+          </ul>
+          <div class="screenshot-placeholder" data-i18n="fab.p4.img">[ Captura: regla de firewall / security group con la IP de Ruvic — reemplazar por assets/img/pgsql-firewall.png ]</div>
+        </li>
+        <li>
+          <strong data-i18n="fab.p5.t">Verifica el usuario desde fuera del servidor.</strong>
+          <p data-i18n="fab.p5.b">Desde una máquina distinta al servidor de BD (idealmente con salida de red similar a la de Ruvic):</p>
+<pre><code>psql -h TU_HOST -p 5432 -U ruvic_reader -d tu_base_de_datos -c "SELECT 1"</code></pre>
+          <p data-i18n="fab.p5.result">Si responde <code>1</code>, el fabricante quedó listo. Anota estos valores para la siguiente sección: host, puerto, base de datos, usuario y contraseña.</p>
+        </li>
+      </ol>
+    </section>
+
+    <!-- ============ 4. PERMISOS ============ -->
+    <section>
+      <h2 id="permisos" data-i18n="section.permisos">Permisos requeridos</h2>
+      <p data-i18n="perm.intro">Principio de mínimo privilegio: el usuario de Ruvic solo necesita estos permisos. No otorgues roles de superusuario, escritura ni administración.</p>
+      <table>
+        <thead>
+          <tr>
+            <th data-i18n="table.permiso">Permiso</th>
+            <th data-i18n="table.para_que">Para qué sirve</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>CONNECT</code></td>
+            <td data-i18n="perm.connect.body">Abrir la conexión a la base de datos</td>
+          </tr>
+          <tr>
+            <td><code>USAGE</code> <span data-i18n="perm.usage.scope">(por esquema)</span></td>
+            <td data-i18n="perm.usage.body">Acceder a los objetos del esquema</td>
+          </tr>
+          <tr>
+            <td><code>SELECT</code> <span data-i18n="perm.select.scope">(por tabla o esquema)</span></td>
+            <td data-i18n="perm.select.body">Leer datos (<code>db.read</code>), contar filas y calcular estadísticas (<code>db.stats</code>), planificar consultas (<code>db.explain</code>)</td>
+          </tr>
+        </tbody>
+      </table>
+      <p data-i18n="perm.catalog">Las vistas de catálogo que usa el conector (<code>pg_stat_user_tables</code>, <code>information_schema.columns</code>, <code>pg_total_relation_size</code>) están disponibles para cualquier usuario autenticado sobre sus objetos visibles; no requieren permisos adicionales.</p>
+    </section>
+
+    <!-- ============ 5. CONFIGURACIÓN EN RUVIC ============ -->
+    <section>
+      <h2 id="configuracion-ruvic" data-i18n="section.configuracion_ruvic">Configuración en Ruvic</h2>
+      <p data-i18n="ruvic.intro">Entra a <strong>Settings → Conectores</strong>, busca la tarjeta <strong>PostgreSQL</strong> y pulsa <strong>Configurar</strong>. Diligencia el formulario con los valores que obtuviste en la sección anterior:</p>
+      <table>
+        <thead>
+          <tr>
+            <th data-i18n="table.campo">Campo del formulario</th>
+            <th data-i18n="table.valor">Valor</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td data-i18n="ruvic.f.host">Host</td>
+            <td data-i18n="ruvic.v.host">Hostname o IP del servidor (ej. <code>db.empresa.com</code>)</td>
+          </tr>
+          <tr>
+            <td data-i18n="ruvic.f.puerto">Puerto</td>
+            <td><code>5432</code> <span data-i18n="ruvic.v.puerto">(salvo configuración distinta)</span></td>
+          </tr>
+          <tr>
+            <td data-i18n="ruvic.f.bd">Base de datos</td>
+            <td data-i18n="ruvic.v.bd">Nombre de la base de datos a consultar</td>
+          </tr>
+          <tr>
+            <td data-i18n="ruvic.f.usuario">Usuario</td>
+            <td><code>ruvic_reader</code></td>
+          </tr>
+          <tr>
+            <td data-i18n="ruvic.f.pass">Contraseña</td>
+            <td data-i18n="ruvic.v.pass">La contraseña del paso 2. Se guarda cifrada como secreto: la interfaz no volverá a mostrarla</td>
+          </tr>
+          <tr>
+            <td data-i18n="ruvic.f.timeout">Timeout de conexión</td>
+            <td data-i18n="ruvic.v.timeout">Opcional; <code>10</code> segundos por defecto</td>
+          </tr>
+        </tbody>
+      </table>
+      <p data-i18n="ruvic.save">Guarda y pulsa <span class="ruvic-button">Probar conexión</span> — la plataforma se conectará a tu base de datos y confirmará que las credenciales y la red funcionan.</p>
+      <div class="screenshot-placeholder" data-i18n="ruvic.img">[ Captura: formulario del conector PostgreSQL en Settings → Conectores — reemplazar por assets/img/pgsql-form.png ]</div>
+    </section>
+
+    <!-- ============ 6. VERIFICACIÓN ============ -->
+    <section>
+      <h2 id="verificacion" data-i18n="section.verificacion">Verificación</h2>
+      <ol class="ruvic-steps">
+        <li>
+          <strong data-i18n="ver.p1.t">Test de conexión exitoso.</strong>
+          <p data-i18n="ver.p1.b">El botón <em>Probar conexión</em> debe responder: <em>“Conexión exitosa a tu-host:5432/tu_base”</em>. La tarjeta del conector cambia a estado <strong>Configurado</strong>.</p>
+        </li>
+        <li>
+          <strong data-i18n="ver.p2.t">Automatización mínima de prueba.</strong>
+          <p data-i18n="ver.p2.b">Abre una conversación nueva con el agente y pídele: <em>“Lista las tablas de la base de datos PostgreSQL y dime cuántas filas tiene cada una.”</em> El agente debe responder con el listado real de tus tablas. Si lo hace, el conector quedó operativo de punta a punta.</p>
+        </li>
+      </ol>
+    </section>
+
+    <!-- ============ 7. SOLUCIÓN DE PROBLEMAS ============ -->
+    <section>
+      <h2 id="solucion-problemas" data-i18n="section.solucion_problemas">Solución de problemas</h2>
+      <table>
+        <thead>
+          <tr>
+            <th data-i18n="table.sintoma">Mensaje / síntoma</th>
+            <th data-i18n="table.causa">Causa probable y solución</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td data-i18n="prob.s1">“Autenticación fallida: usuario o contraseña inválidos”</td>
+            <td data-i18n="prob.c1">Contraseña mal copiada o usuario inexistente. Reintenta el paso 2 de la sección 3 y vuelve a guardar el formulario (deja la contraseña vacía para conservar la anterior o escribe la nueva para reemplazarla).</td>
+          </tr>
+          <tr>
+            <td data-i18n="prob.s2">“No se pudo conectar … (timeout)”</td>
+            <td data-i18n="prob.c2">La plataforma no alcanza el host/puerto. Revisa el paso 4 (firewall / security group / <code>pg_hba.conf</code>) y que el host no sea <code>localhost</code> (debe ser accesible desde Ruvic, no desde tu equipo).</td>
+          </tr>
+          <tr>
+            <td data-i18n="prob.s3">“La base de datos 'X' no existe”</td>
+            <td data-i18n="prob.c3">Nombre de base de datos mal escrito en el formulario. Verifica con <code>\l</code> en psql.</td>
+          </tr>
+          <tr>
+            <td data-i18n="prob.s4">El agente ve las tablas pero “permission denied” al leer una</td>
+            <td data-i18n="prob.c4">Falta el <code>GRANT SELECT</code> sobre esa tabla o esquema (tablas creadas antes del <code>ALTER DEFAULT PRIVILEGES</code>). Repite el paso 3 de la sección 3 para ese esquema.</td>
+          </tr>
+          <tr>
+            <td data-i18n="prob.s5">El conector aparece “Sin configurar” tras guardar</td>
+            <td data-i18n="prob.c5">Algún campo obligatorio quedó vacío. Ábrelo de nuevo y completa host, puerto, base de datos, usuario y contraseña.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ============ 8. FAQ Y SEGURIDAD ============ -->
+    <section>
+      <h2 id="faq-seguridad" data-i18n="section.faq_seguridad">Preguntas frecuentes y notas de seguridad</h2>
+
+      <h3 data-i18n="faq.q1">¿El agente puede modificar o borrar datos?</h3>
+      <p data-i18n="faq.a1">No. El conector abre todas las conexiones en modo solo lectura y el usuario <code>ruvic_reader</code> solo tiene permiso <code>SELECT</code>. Hay dos barreras independientes.</p>
+
+      <h3 data-i18n="faq.q2">¿Dónde queda guardada la contraseña?</h3>
+      <p data-i18n="faq.a2">Como secreto en el almacén de credenciales de la plataforma, asociado a tu usuario. La interfaz nunca vuelve a mostrarla; solo indica “definida”. Para cambiarla, escribe una nueva en el formulario; para conservarla al editar otros campos, deja el campo vacío.</p>
+
+      <h3 data-i18n="faq.q3">Rotación de credenciales</h3>
+      <p data-i18n="faq.a3">Recomendado cada 90 días o según tu política: cambia la contraseña en PostgreSQL (<code>ALTER ROLE ruvic_reader PASSWORD '...'</code>), actualízala en el formulario del conector y pulsa <em>Probar conexión</em>.</p>
+
+      <h3 data-i18n="faq.q4">¿Qué hago si la contraseña se compromete?</h3>
+      <ol>
+        <li data-i18n="faq.a4.li1">Cambia la contraseña en PostgreSQL de inmediato (<code>ALTER ROLE … PASSWORD</code>) o desactiva el usuario (<code>ALTER ROLE ruvic_reader NOLOGIN</code>).</li>
+        <li data-i18n="faq.a4.li2">Revisa la actividad reciente del usuario en los logs del servidor.</li>
+        <li data-i18n="faq.a4.li3">Actualiza la nueva contraseña en el formulario del conector.</li>
+      </ol>
+
+      <h3 data-i18n="faq.q5">¿Expiran las credenciales?</h3>
+      <p data-i18n="faq.a5">Por defecto no (usuario/contraseña de PostgreSQL no caducan solos). Si tu política exige expiración, configúrala con <code>VALID UNTIL</code> al crear el rol y programa la rotación antes de esa fecha.</p>
+
+      <div class="callout callout-warning">
+        <span class="callout-title" data-i18n="faq.bp.title">Buenas prácticas</span>
+        <span data-i18n="faq.bp.body">Usa siempre un usuario dedicado y de solo lectura; restringe el acceso por IP; no expongas esquemas con datos sensibles que el agente no necesite; y evita compartir la contraseña por canales no seguros.</span>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const I18N = {
+      es: {
+        doc_title: "Conector PostgreSQL — Ruvic",
+        toc_title: "Contenido",
+        "toc.que_es": "¿Qué es y para qué sirve?",
+        "toc.prerrequisitos": "Prerrequisitos",
+        "toc.configuracion_fabricante": "Configuración en el fabricante",
+        "toc.permisos": "Permisos requeridos",
+        "toc.configuracion_ruvic": "Configuración en Ruvic",
+        "toc.verificacion": "Verificación",
+        "toc.solucion_problemas": "Solución de problemas",
+        "toc.faq_seguridad": "Preguntas frecuentes y notas de seguridad",
+        guide_title: "PostgreSQL",
+        "section.que_es": "¿Qué es y para qué sirve?",
+        "que_es.body": "El conector PostgreSQL permite que el agente de Ruvic acceda a tu base de datos en modo solo lectura: puede consultar información, pero nunca modificarla. Una vez configurado, puedes pedirle al agente cosas como:",
+        "que_es.ej1": "“Genera un reporte con las ventas del último trimestre y envíalo por correo.”",
+        "que_es.ej2": "“¿Cuántos clientes nuevos se registraron esta semana?”",
+        "que_es.ej3": "“Revisa por qué este query está lento y proponme mejoras.”",
+        "que_es.ops": "Operaciones soportadas:",
+        "table.operacion": "Operación",
+        "table.que_hace": "Qué hace",
+        "ops.list_tables": "Lista las tablas de la base de datos con su cantidad de filas",
+        "ops.read": "Lee los datos de una tabla (con límite de filas)",
+        "ops.stats": "Estadísticas de una tabla: filas, tamaño, columnas y tipos",
+        "ops.explain": "Analiza el plan de ejecución de una consulta sin ejecutarla",
+        "que_es.callout.title": "Solo lectura, por diseño",
+        "que_es.callout.body": "El conector abre todas las conexiones en modo de solo lectura. Aunque el agente lo intentara, la base de datos rechazaría cualquier escritura.",
+        "section.prerrequisitos": "Prerrequisitos",
+        "prer.db": "Una base de datos PostgreSQL 12 o superior (en tu servidor, en la nube — RDS, Cloud SQL, Azure Database — o en Docker).",
+        "prer.admin": "Acceso administrativo a la base de datos (rol con permiso para crear usuarios), solo durante la configuración inicial.",
+        "prer.red": "Acceso de red desde la plataforma Ruvic al servidor de base de datos (host y puerto alcanzables; regla de firewall o lista de IPs permitidas si aplica).",
+        "prer.datos": "Los datos de conexión: host, puerto (por defecto 5432) y nombre de la base de datos.",
+        "section.configuracion_fabricante": "Configuración en el fabricante",
+        "fab.intro": "Vas a crear un usuario dedicado de solo lectura para Ruvic. No uses un usuario administrador ni el de tu aplicación: un usuario dedicado permite auditar la actividad del agente y limitar el acceso al mínimo.",
+        "fab.p1.t": "Conéctate a la base de datos como administrador.",
+        "fab.p1.b": "Usa psql u otra herramienta (pgAdmin, DBeaver) con un rol administrador:",
+        "fab.p2.t": "Crea el usuario de solo lectura para Ruvic.",
+        "fab.p2.b": "Elige una contraseña fuerte (mínimo 16 caracteres, generada aleatoriamente) y guárdala: la usarás en el formulario de Ruvic (campo Contraseña).",
+        "fab.p3.t": "Otorga los permisos de lectura.",
+        "fab.p3.b": "Sobre la base de datos y los esquemas que quieras exponer al agente (el ejemplo usa public; repite para otros esquemas):",
+        "fab.p3.note.title": "Nota",
+        "fab.p3.note.body": "La última instrucción hace que las tablas creadas en el futuro también sean legibles por Ruvic sin repetir el GRANT.",
+        "fab.p4.t": "Habilita el acceso de red desde Ruvic.",
+        "fab.p4.b": "Si tu PostgreSQL restringe conexiones por IP (habitual en producción), permite la IP de la plataforma Ruvic:",
+        "fab.p4.li1": "Servidor propio: agrega una línea en pg_hba.conf (ej. host tu_bd ruvic_reader IP_DE_RUVIC/32 scram-sha-256) y recarga la configuración (SELECT pg_reload_conf();).",
+        "fab.p4.li2": "AWS RDS / Cloud SQL / Azure: agrega la IP en el security group o en la lista de redes autorizadas de la consola del proveedor.",
+        "fab.p4.img": "[ Captura: regla de firewall / security group con la IP de Ruvic — reemplazar por assets/img/pgsql-firewall.png ]",
+        "fab.p5.t": "Verifica el usuario desde fuera del servidor.",
+        "fab.p5.b": "Desde una máquina distinta al servidor de BD (idealmente con salida de red similar a la de Ruvic):",
+        "fab.p5.result": "Si responde 1, el fabricante quedó listo. Anota estos valores para la siguiente sección: host, puerto, base de datos, usuario y contraseña.",
+        "section.permisos": "Permisos requeridos",
+        "perm.intro": "Principio de mínimo privilegio: el usuario de Ruvic solo necesita estos permisos. No otorgues roles de superusuario, escritura ni administración.",
+        "table.permiso": "Permiso",
+        "table.para_que": "Para qué sirve",
+        "perm.connect.body": "Abrir la conexión a la base de datos",
+        "perm.usage.scope": "(por esquema)",
+        "perm.usage.body": "Acceder a los objetos del esquema",
+        "perm.select.scope": "(por tabla o esquema)",
+        "perm.select.body": "Leer datos (db.read), contar filas y calcular estadísticas (db.stats), planificar consultas (db.explain)",
+        "perm.catalog": "Las vistas de catálogo que usa el conector (pg_stat_user_tables, information_schema.columns, pg_total_relation_size) están disponibles para cualquier usuario autenticado sobre sus objetos visibles; no requieren permisos adicionales.",
+        "section.configuracion_ruvic": "Configuración en Ruvic",
+        "ruvic.intro": "Entra a Settings → Conectores, busca la tarjeta PostgreSQL y pulsa Configurar. Diligencia el formulario con los valores que obtuviste en la sección anterior:",
+        "table.campo": "Campo del formulario",
+        "table.valor": "Valor",
+        "ruvic.f.host": "Host",
+        "ruvic.v.host": "Hostname o IP del servidor (ej. db.empresa.com)",
+        "ruvic.f.puerto": "Puerto",
+        "ruvic.v.puerto": "(salvo configuración distinta)",
+        "ruvic.f.bd": "Base de datos",
+        "ruvic.v.bd": "Nombre de la base de datos a consultar",
+        "ruvic.f.usuario": "Usuario",
+        "ruvic.f.pass": "Contraseña",
+        "ruvic.v.pass": "La contraseña del paso 2. Se guarda cifrada como secreto: la interfaz no volverá a mostrarla",
+        "ruvic.f.timeout": "Timeout de conexión",
+        "ruvic.v.timeout": "Opcional; 10 segundos por defecto",
+        "ruvic.save": "Guarda y pulsa Probar conexión — la plataforma se conectará a tu base de datos y confirmará que las credenciales y la red funcionan.",
+        "ruvic.img": "[ Captura: formulario del conector PostgreSQL en Settings → Conectores — reemplazar por assets/img/pgsql-form.png ]",
+        "section.verificacion": "Verificación",
+        "ver.p1.t": "Test de conexión exitoso.",
+        "ver.p1.b": "El botón Probar conexión debe responder: “Conexión exitosa a tu-host:5432/tu_base”. La tarjeta del conector cambia a estado Configurado.",
+        "ver.p2.t": "Automatización mínima de prueba.",
+        "ver.p2.b": "Abre una conversación nueva con el agente y pídele: “Lista las tablas de la base de datos PostgreSQL y dime cuántas filas tiene cada una.” El agente debe responder con el listado real de tus tablas. Si lo hace, el conector quedó operativo de punta a punta.",
+        "section.solucion_problemas": "Solución de problemas",
+        "table.sintoma": "Mensaje / síntoma",
+        "table.causa": "Causa probable y solución",
+        "prob.s1": "“Autenticación fallida: usuario o contraseña inválidos”",
+        "prob.c1": "Contraseña mal copiada o usuario inexistente. Reintenta el paso 2 de la sección 3 y vuelve a guardar el formulario (deja la contraseña vacía para conservar la anterior o escribe la nueva para reemplazarla).",
+        "prob.s2": "“No se pudo conectar … (timeout)”",
+        "prob.c2": "La plataforma no alcanza el host/puerto. Revisa el paso 4 (firewall / security group / pg_hba.conf) y que el host no sea localhost (debe ser accesible desde Ruvic, no desde tu equipo).",
+        "prob.s3": "“La base de datos 'X' no existe”",
+        "prob.c3": "Nombre de base de datos mal escrito en el formulario. Verifica con \\l en psql.",
+        "prob.s4": "El agente ve las tablas pero “permission denied” al leer una",
+        "prob.c4": "Falta el GRANT SELECT sobre esa tabla o esquema (tablas creadas antes del ALTER DEFAULT PRIVILEGES). Repite el paso 3 de la sección 3 para ese esquema.",
+        "prob.s5": "El conector aparece “Sin configurar” tras guardar",
+        "prob.c5": "Algún campo obligatorio quedó vacío. Ábrelo de nuevo y completa host, puerto, base de datos, usuario y contraseña.",
+        "section.faq_seguridad": "Preguntas frecuentes y notas de seguridad",
+        "faq.q1": "¿El agente puede modificar o borrar datos?",
+        "faq.a1": "No. El conector abre todas las conexiones en modo solo lectura y el usuario ruvic_reader solo tiene permiso SELECT. Hay dos barreras independientes.",
+        "faq.q2": "¿Dónde queda guardada la contraseña?",
+        "faq.a2": "Como secreto en el almacén de credenciales de la plataforma, asociado a tu usuario. La interfaz nunca vuelve a mostrarla; solo indica “definida”. Para cambiarla, escribe una nueva en el formulario; para conservarla al editar otros campos, deja el campo vacío.",
+        "faq.q3": "Rotación de credenciales",
+        "faq.a3": "Recomendado cada 90 días o según tu política: cambia la contraseña en PostgreSQL (ALTER ROLE ruvic_reader PASSWORD '...'), actualízala en el formulario del conector y pulsa Probar conexión.",
+        "faq.q4": "¿Qué hago si la contraseña se compromete?",
+        "faq.a4.li1": "Cambia la contraseña en PostgreSQL de inmediato (ALTER ROLE … PASSWORD) o desactiva el usuario (ALTER ROLE ruvic_reader NOLOGIN).",
+        "faq.a4.li2": "Revisa la actividad reciente del usuario en los logs del servidor.",
+        "faq.a4.li3": "Actualiza la nueva contraseña en el formulario del conector.",
+        "faq.q5": "¿Expiran las credenciales?",
+        "faq.a5": "Por defecto no (usuario/contraseña de PostgreSQL no caducan solos). Si tu política exige expiración, configúrala con VALID UNTIL al crear el rol y programa la rotación antes de esa fecha.",
+        "faq.bp.title": "Buenas prácticas",
+        "faq.bp.body": "Usa siempre un usuario dedicado y de solo lectura; restringe el acceso por IP; no expongas esquemas con datos sensibles que el agente no necesite; y evita compartir la contraseña por canales no seguros.",
+      },
+      en: {
+        doc_title: "PostgreSQL Connector — Ruvic",
+        toc_title: "Contents",
+        "toc.que_es": "What it is and what it’s for",
+        "toc.prerrequisitos": "Prerequisites",
+        "toc.configuracion_fabricante": "Vendor / provider setup",
+        "toc.permisos": "Required permissions",
+        "toc.configuracion_ruvic": "Configuration in Ruvic",
+        "toc.verificacion": "Verification",
+        "toc.solucion_problemas": "Troubleshooting",
+        "toc.faq_seguridad": "FAQ and security notes",
+        guide_title: "PostgreSQL",
+        "section.que_es": "What it is and what it’s for",
+        "que_es.body": "The PostgreSQL connector lets the Ruvic agent access your database in read-only mode: it can query information but never modify it. Once configured, you can ask the agent things like:",
+        "que_es.ej1": "“Build a report with last quarter's sales and email it.”",
+        "que_es.ej2": "“How many new customers signed up this week?”",
+        "que_es.ej3": "“Check why this query is slow and suggest improvements.”",
+        "que_es.ops": "Supported operations:",
+        "table.operacion": "Operation",
+        "table.que_hace": "What it does",
+        "ops.list_tables": "Lists the database tables with their row counts",
+        "ops.read": "Reads data from a table (with a row limit)",
+        "ops.stats": "Table statistics: rows, size, columns and types",
+        "ops.explain": "Analyzes a query's execution plan without running it",
+        "que_es.callout.title": "Read-only by design",
+        "que_es.callout.body": "The connector opens every connection in read-only mode. Even if the agent tried, the database would reject any write.",
+        "section.prerrequisitos": "Prerequisites",
+        "prer.db": "A PostgreSQL 12+ database (self-hosted, cloud — RDS, Cloud SQL, Azure Database — or Docker).",
+        "prer.admin": "Administrative access to the database (a role that can create users), only during initial setup.",
+        "prer.red": "Network access from the Ruvic platform to the database server (reachable host and port; firewall rule or IP allow-list if applicable).",
+        "prer.datos": "The connection details: host, port (default 5432) and database name.",
+        "section.configuracion_fabricante": "Vendor / provider setup",
+        "fab.intro": "You will create a dedicated read-only user for Ruvic. Do not reuse an admin or application user: a dedicated user lets you audit the agent's activity and keep access to a minimum.",
+        "fab.p1.t": "Connect to the database as an administrator.",
+        "fab.p1.b": "Use psql or another tool (pgAdmin, DBeaver) with an admin role:",
+        "fab.p2.t": "Create the read-only user for Ruvic.",
+        "fab.p2.b": "Choose a strong password (16+ random characters) and save it: you will paste it into the Ruvic form (Password field).",
+        "fab.p3.t": "Grant read permissions.",
+        "fab.p3.b": "On the database and the schemas you want to expose to the agent (the example uses public; repeat for other schemas):",
+        "fab.p3.note.title": "Note",
+        "fab.p3.note.body": "The last statement makes future tables readable by Ruvic without re-running the GRANT.",
+        "fab.p4.t": "Enable network access from Ruvic.",
+        "fab.p4.b": "If your PostgreSQL restricts connections by IP (common in production), allow the Ruvic platform IP:",
+        "fab.p4.li1": "Self-hosted: add a line to pg_hba.conf (e.g. host your_db ruvic_reader RUVIC_IP/32 scram-sha-256) and reload the configuration (SELECT pg_reload_conf();).",
+        "fab.p4.li2": "AWS RDS / Cloud SQL / Azure: add the IP to the security group or authorized networks list in the provider console.",
+        "fab.p4.img": "[ Screenshot: firewall rule / security group with the Ruvic IP — replace with assets/img/pgsql-firewall.png ]",
+        "fab.p5.t": "Verify the user from outside the server.",
+        "fab.p5.b": "From a machine other than the DB server (ideally with network egress similar to Ruvic's):",
+        "fab.p5.result": "If it returns 1, the vendor side is ready. Write down these values for the next section: host, port, database, user and password.",
+        "section.permisos": "Required permissions",
+        "perm.intro": "Least-privilege principle: the Ruvic user only needs these permissions. Do not grant superuser, write or admin roles.",
+        "table.permiso": "Permission",
+        "table.para_que": "Why it's needed",
+        "perm.connect.body": "Open the database connection",
+        "perm.usage.scope": "(per schema)",
+        "perm.usage.body": "Access the schema's objects",
+        "perm.select.scope": "(per table or schema)",
+        "perm.select.body": "Read data (db.read), count rows and compute statistics (db.stats), plan queries (db.explain)",
+        "perm.catalog": "The catalog views the connector uses (pg_stat_user_tables, information_schema.columns, pg_total_relation_size) are available to any authenticated user over their visible objects; no extra permissions required.",
+        "section.configuracion_ruvic": "Configuration in Ruvic",
+        "ruvic.intro": "Go to Settings → Connectors, find the PostgreSQL card and click Configure. Fill in the form with the values from the previous section:",
+        "table.campo": "Form field",
+        "table.valor": "Value",
+        "ruvic.f.host": "Host",
+        "ruvic.v.host": "Server hostname or IP (e.g. db.company.com)",
+        "ruvic.f.puerto": "Port",
+        "ruvic.v.puerto": "(unless configured otherwise)",
+        "ruvic.f.bd": "Database",
+        "ruvic.v.bd": "Name of the database to query",
+        "ruvic.f.usuario": "Username",
+        "ruvic.f.pass": "Password",
+        "ruvic.v.pass": "The password from step 2. Stored as a secret: the UI will never display it again",
+        "ruvic.f.timeout": "Connection timeout",
+        "ruvic.v.timeout": "Optional; defaults to 10 seconds",
+        "ruvic.save": "Save and click Test connection — the platform will connect to your database and confirm credentials and networking work.",
+        "ruvic.img": "[ Screenshot: PostgreSQL connector form in Settings → Connectors — replace with assets/img/pgsql-form.png ]",
+        "section.verificacion": "Verification",
+        "ver.p1.t": "Successful connection test.",
+        "ver.p1.b": "The Test connection button should return: “Successful connection to your-host:5432/your_db”. The connector card switches to Configured.",
+        "ver.p2.t": "Minimal test automation.",
+        "ver.p2.b": "Open a new conversation with the agent and ask: “List the tables in the PostgreSQL database and tell me how many rows each one has.” The agent should reply with your actual table list. If it does, the connector is fully operational.",
+        "section.solucion_problemas": "Troubleshooting",
+        "table.sintoma": "Message / symptom",
+        "table.causa": "Likely cause and fix",
+        "prob.s1": "“Authentication failed: invalid user or password”",
+        "prob.c1": "Mistyped password or missing user. Redo step 2 of section 3 and re-save the form (leave the password empty to keep the previous one or type the new one to replace it).",
+        "prob.s2": "“Could not connect … (timeout)”",
+        "prob.c2": "The platform cannot reach the host/port. Review step 4 (firewall / security group / pg_hba.conf) and make sure the host is not localhost (it must be reachable from Ruvic, not from your laptop).",
+        "prob.s3": "“Database 'X' does not exist”",
+        "prob.c3": "Database name mistyped in the form. Check with \\l in psql.",
+        "prob.s4": "The agent lists tables but gets “permission denied” reading one",
+        "prob.c4": "Missing GRANT SELECT on that table or schema (tables created before the ALTER DEFAULT PRIVILEGES). Redo step 3 of section 3 for that schema.",
+        "prob.s5": "Connector shows “Not configured” after saving",
+        "prob.c5": "A required field was left empty. Open it again and fill in host, port, database, user and password.",
+        "section.faq_seguridad": "FAQ and security notes",
+        "faq.q1": "Can the agent modify or delete data?",
+        "faq.a1": "No. The connector opens every connection in read-only mode and the ruvic_reader user only has SELECT. Two independent safeguards.",
+        "faq.q2": "Where is the password stored?",
+        "faq.a2": "As a secret in the platform's credential store, tied to your user. The UI never displays it again; it only shows “set”. To change it, type a new one in the form; to keep it while editing other fields, leave the field empty.",
+        "faq.q3": "Credential rotation",
+        "faq.a3": "Recommended every 90 days or per your policy: change the password in PostgreSQL (ALTER ROLE ruvic_reader PASSWORD '...'), update it in the connector form and click Test connection.",
+        "faq.q4": "What if the password is compromised?",
+        "faq.a4.li1": "Change the password in PostgreSQL immediately (ALTER ROLE … PASSWORD) or disable the user (ALTER ROLE ruvic_reader NOLOGIN).",
+        "faq.a4.li2": "Review the user's recent activity in the server logs.",
+        "faq.a4.li3": "Update the new password in the connector form.",
+        "faq.q5": "Do the credentials expire?",
+        "faq.a5": "By default no (PostgreSQL user/password does not expire on its own). If your policy requires expiration, set it with VALID UNTIL when creating the role and schedule rotation before that date.",
+        "faq.bp.title": "Best practices",
+        "faq.bp.body": "Always use a dedicated read-only user; restrict access by IP; do not expose schemas with sensitive data the agent doesn't need; and never share the password over insecure channels.",
+      },
+    };
+    /* El portal aplica el idioma del usuario (localStorage ruvic-docs-lang)
+       y actualiza [data-i18n], [data-i18n-placeholder] y [data-i18n-alt]. */
+  </script>
+</body>
+</html>
