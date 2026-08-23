@@ -25,7 +25,7 @@ class PostgresqlConfig:
     connect_timeout: int = 10
 
     @classmethod
-    def from_env(cls) -> "PostgresqlConfig":
+    def from_env(cls) -> PostgresqlConfig:
         """Construye la configuración desde las variables RUVIC_POSTGRESQL_*.
 
         Raises:

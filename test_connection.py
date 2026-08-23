@@ -23,9 +23,11 @@ def test_connection() -> tuple[bool, str]:
     except ImportError:
         return (
             False,
-            "La librería ruvic-postgresql-connector no está instalada. "
-            "Instala con: pip install git+https://github.com/Dgirto/"
-            "PostgreSQL.git#subdirectory=lib",
+            (
+                "La librería ruvic-postgresql-connector no está instalada. "
+                "Instala con: pip install git+https://github.com/Dgirto/"
+                "PostgreSQL.git#subdirectory=lib"
+            ),
         )
 
     try:
@@ -41,13 +43,15 @@ def test_connection() -> tuple[bool, str]:
         return False, f"Error de red: {exc}"
     except PostgresqlDataError as exc:
         return False, f"Error de datos: {exc}"
-    except Exception as exc:  # red de seguridad: jamás propagar
+    except Exception as exc:  # noqa: BLE001 - red de seguridad: jamás propagar
         return False, f"Error inesperado: {exc}"
 
     return (
         True,
-        f"Conexión exitosa a {client.config.host}:{client.config.port}/"
-        f"{client.config.database}",
+        (
+            f"Conexión exitosa a {client.config.host}:{client.config.port}/"
+            f"{client.config.database}"
+        ),
     )
 
 
