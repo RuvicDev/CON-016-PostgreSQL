@@ -28,6 +28,13 @@ from .exceptions import (
 from .logging_utils import get_logger
 
 _IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_STRING_LITERAL_RE = re.compile(r"'(?:[^']|'')*'")
+
+
+def _has_multiple_statements(sql: str) -> bool:
+    """Detecta un ';' que separa sentencias reales, ignorando los que
+    aparecen dentro de literales de texto (ej. WHERE nota = 'a; b')."""
+    return ";" in _STRING_LITERAL_RE.sub("", sql)
 
 # Códigos SQLSTATE relevantes (ver Apéndice A de la documentación de PostgreSQL).
 _AUTH_SQLSTATES = {"28P01", "28000"}  # invalid_password, invalid_authorization_specification
@@ -326,7 +333,7 @@ class PostgresqlClient:
             {'total_cost': 1543.2, 'plan': {...}}
         """
         statement = query.strip().rstrip(";")
-        if ";" in statement:
+        if _has_multiple_statements(statement):
             raise PostgresqlDataError(
                 "Solo se permite analizar un statement a la vez (sin ';')."
             )
